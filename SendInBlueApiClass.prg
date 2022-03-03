@@ -72,9 +72,11 @@ Define Class SendInBlueApi As Custom
 		If Len(Alltrim(This.apiUrl)) > 0 And Len(Alltrim(This.apiKey)) > 0
 			Local lError
 			lError = .F.
+			* Setto il pattern per la validazione dell'url
+			This.oRegex.Pattern = This.patternValidateUrl
 
 			* Verifico che l'url sia valido
-			if this.oRegex.test(This.apiUrl, this.patternValidateUrl)
+			if this.oRegex.test(This.apiUrl)
 
 				* Recupero i dati dell'account
 				This.GetAccountInfo()
@@ -411,7 +413,9 @@ Define Class SendInBlueApi As Custom
 			* Verifico che l'email sia valida
 			cEmail = alltrim(cEmail)
 			cEmail = lower(cEmail)
-			if not this.oRegex.test(cEmail, this.patternValidateEmail)	
+			* Setto il pattern per il controllo dell'email
+			this.oRegex.pattern = this.patternValidateEmail
+			if not this.oRegex.test(cEmail)	
 				lError = .T.
 			endif
 		Else
