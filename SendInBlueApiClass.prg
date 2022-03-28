@@ -1,16 +1,11 @@
 * Classe Visual FoxPro per integrare NextLogic a SendInBlue
-* @author Claudio Brusaferri < brusacla@gmail.com
+* @author Claudio Brusaferri <
 * @version 1.0
 * @package NextLogic
 
 
 * Documentazione API SendInBlue
 * @link https://developers.sendinblue.com/reference
-
-
-* Dati di esempio da configurare in NextLogic del cliente
-* apiKey = "xkeysib-[API_KEY]"
-* apiUrl = "https://api.sendinblue.com/v3/"
 
 Define Class SendInBlueApi As Custom
 	** CHR per andare a capo
@@ -21,8 +16,9 @@ Define Class SendInBlueApi As Custom
 
 	** Oggetto per il collegamento Http
 	Http		= Null
+	postHttp 	= Null
 
-	** Oggetto regex per la validazione dei campi
+	** Oggetto oRegex per la validazione dei campi
 	oRegex		= Null
 
 	** Pattern per la validazione delle email
@@ -60,11 +56,12 @@ Define Class SendInBlueApi As Custom
 	** Json Result Object
 	dataResult	= Null
 
-	&& Creazione oggetto richieste HTTP
+	&& Creazione oggetto richieste HTTP e oRegexP
 	Function Init()
 		This.Http = Createobject("MSXML2.XMLHTTP.6.0")
-		this.oRegex = CreateObject("VBScript.RegExp")
-	Endfunc
+		This.postHttp = Createobject("WinHttp.WinHttpRequest.5.1")
+		This.oRegex = CreateObject("VBScript.Regexp")
+	ENDFUNC
 
 	&& Funzione per attivare le API
 	Function Main()
@@ -72,9 +69,8 @@ Define Class SendInBlueApi As Custom
 		If Len(Alltrim(This.apiUrl)) > 0 And Len(Alltrim(This.apiKey)) > 0
 			Local lError
 			lError = .F.
-			* Setto il pattern per la validazione dell'url
-			This.oRegex.Pattern = This.patternValidateUrl
-
+           		 this.oRegex.pattern = this.patternValidateUrl
+            
 			* Verifico che l'url sia valido
 			if this.oRegex.test(This.apiUrl)
 
@@ -152,7 +148,7 @@ Define Class SendInBlueApi As Custom
 
 	&& Ogetto Http tipo POST
 	Function HttpOpenPost(cApi)
-		This.Http.Open("POST", This.apiUrl + cApi ,.F.)
+		This.postHttp .Open("POST", This.apiUrl + cApi ,.F.)
 	Endfunc
 
 	&& Ogetto Http tipo PUT
@@ -237,6 +233,7 @@ Define Class SendInBlueApi As Custom
 		* boolean
 	* Nella pagina https://developers.sendinblue.com/reference/createattribute-1/ si trovano tutti gli altri casi implementabili	
 	Function CreateAttribute(cName, cType) && cName [nome dell'attributo], cType [tipo di attributo "text", "date", "float", "boolean"]
+		
 		local lError
 		lError = .F.
 
@@ -270,7 +267,7 @@ Define Class SendInBlueApi As Custom
 		if lError = .F.
 			* Eseguo la POST per creare un nuovo attributo
 			With This
-				.HttpOpenPost("contacts/attributes/normal/" + cName)
+				.HttpOpenPut("contacts/attributes/normal/" + cName)
 				.Http.setRequestHeader("Content-Type","application/json")
 				.Http.setRequestHeader("api-key", This.apiKey)
 				.Http.Send('{"type":"' + cType + '"}')
@@ -405,17 +402,23 @@ Define Class SendInBlueApi As Custom
 	* In questa classe non viene scritta una fuznione per aggiornare un contatto o una serie di contatti
 	* Per vedere tutti i casi implementabili in questa classe vedere la pagina https://developers.sendinblue.com/reference/createcontact
 	function CreateContact(cEmail, arrAttributes) && cEmail [email del contatto], arrAttributes [array di attributi]
-		local lError
+		
+		
+		local lError, lRegex, lHTTP
 		lError = .F.
+		
+		&& Sono costretto a crearli qui perché vanno in conflitto con tutto il resto
+		lRegex = CreateObject("VBScript.Regexp")
+		lHTTP = CREATEOBJECT("WinHttp.WinHttpRequest.5.1")    
 		
 		* Controllo che l'email del contatto sia valida
 		if len(alltrim(cEmail)) > 0
 			* Verifico che l'email sia valida
 			cEmail = alltrim(cEmail)
 			cEmail = lower(cEmail)
-			* Setto il pattern per il controllo dell'email
-			this.oRegex.pattern = this.patternValidateEmail
-			if not this.oRegex.test(cEmail)	
+			lRegex .pattern = this.patternValidateEmail
+			
+			if not lRegex .test(cEmail)	
 				lError = .T.
 			endif
 		Else
@@ -427,49 +430,58 @@ Define Class SendInBlueApi As Custom
 			* Devo scorrere l'array e costruire un json che contiene tutti gli attributi
 			local jsonAttributes, lCount, lArrCount
 			jsonAttributes = ''
-			lCount = 0
-			lArrCount = aLen(arrAttributes)
-
-			* Scorro l'array
-			do while lCount < lArrCount
-				'{"' + arrAttributes[i][0] + '":"' + arrAttributes[i][1] + '"},'
+			
+			
+			* Scorro l'array Alex ver 
+			lCount = 1 
+			lArrCount = aLen(arrAttributes) / 2 && i parametri sono due
+			
+			do while lCount <= lArrCount
+			
+				IF lCount = lArrCount
+					jsonAttributes = jsonAttributes + '"' + arrAttributes[1,lCount] + '":"' + arrAttributes[2,lCount] + '"'
+				else
+					jsonAttributes = jsonAttributes + '"' + arrAttributes[1,lCount] + '":"' + arrAttributes[2,lCount] + '",'
+				endif
 				lCount = lCount + 1
-			enddo
+			ENDDO
 
 		endif 
 
 		* Se non ci sono errori
 		if lError = .F.
 			local cData
-			cData = '{'
+			cData = '{"attributes":{'
 
 			* Se sono presenti attributi
 			if aLen(arrAttributes) > 0
 				cData = cData + jsonAttributes
 			endif 
-
+			
+			cData = cData + '},'			
 			cData = cData + '"updateEnabled": true, "email": "' + cEmail + '"}'
 
-			* Eseguo la POST per aggiungere il contatto
-			With This
-				.HttpOpenPost("contacts")
-				.Http.setRequestHeader("Content-Type","application/json")
-				.Http.setRequestHeader("api-key", This.apiKey)
-				.Http.Send(cData)
-			Endwith
+			* Eseguo la POST per aggiungere il contatto			
+			lHTTP.Open("POST", this.apiUrl + "contacts", .F.)
+			lHTTP.SetRequestHeader("content-type", "application/json") 
+			lHTTP.SetRequestHeader("api-key", This.apiKey)
+			lHTTP.Send(cData)
 
 			* Verifico se il contatto è stato aggiunto
-			If This.http.status = 204
+			If lHTTP.status = 204
 				This.dataResult = "Created"
 			Else
 				* Restituisco l'errore HTTP
-				This.dataResult = this.JSonParser(This.Http.responseText)
+				This.dataResult = this.JSonParser(lHTTP.responseText)
 			endif
 
 		Else
 			* Se non è stato impostato l'email del contatto
 			This.dataResult = this.ApiMessage("Email non valida")
-		endif
+		ENDIF
+		
+		RELEASE lRegex 
+		RELEASE lHTTP
 	Endfunc
 
 Enddefine && fine Define Class SendInBlueApi As Custom
